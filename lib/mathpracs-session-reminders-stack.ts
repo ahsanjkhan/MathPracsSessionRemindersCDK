@@ -27,7 +27,7 @@ import {
   CFN_OUTPUT_SESSION_REMINDERS_TABLE_ID,
   CFN_OUTPUT_SESSION_REMINDERS_TABLE_DESCRIPTION,
   CFN_OUTPUT_SESSION_REMINDERS_LAMBDA_ID,
-  CFN_OUTPUT_SESSION_REMINDERS_LAMBDA_DESCRIPTION
+  CFN_OUTPUT_SESSION_REMINDERS_LAMBDA_DESCRIPTION, SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_STUDENTS_METADATA_TABLE_NAME
 } from "../config/constants";
 
 export class MathPracsSessionRemindersStack extends cdk.Stack {
@@ -45,6 +45,8 @@ export class MathPracsSessionRemindersStack extends cdk.Stack {
     // Import resources from other stacks
     const sessionsTableArn = cdk.Fn.importValue('MathPracs-SessionsTable-Arn');
     const studentsTableArn = cdk.Fn.importValue('MathPracs-StudentsTable-Arn');
+    const studentsV2TableArn = cdk.Fn.importValue('MathPracs-StudentsV2Table-Arn');
+    const studentsMetadataV2TableArn = cdk.Fn.importValue('MathPracs-StudentsMetadataV2Table-Arn');
     const apiSecretsArn = cdk.Fn.importValue('MathPracs-ApiSecrets-Arn');
 
     // Session Reminders Lambda
@@ -60,7 +62,8 @@ export class MathPracsSessionRemindersStack extends cdk.Stack {
 
     sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_SESSION_REMINDERS_TABLE_NAME, sessionRemindersTable.tableName);
     sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_SESSIONS_TABLE_NAME, 'Sessions');
-    sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_STUDENTS_TABLE_NAME, 'Students');
+    sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_STUDENTS_TABLE_NAME, 'StudentsV2');
+    sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_STUDENTS_METADATA_TABLE_NAME, 'StudentsMetadataV2');
     sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_API_SECRETS_ARN, apiSecretsArn);
 
     // Grant Lambda permissions
@@ -69,7 +72,7 @@ export class MathPracsSessionRemindersStack extends cdk.Stack {
     // Grant read access to imported tables
     sessionRemindersLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: ['dynamodb:Scan', 'dynamodb:GetItem', 'dynamodb:Query'],
-      resources: [sessionsTableArn, studentsTableArn]
+      resources: [sessionsTableArn, studentsV2TableArn, studentsMetadataV2TableArn]
     }));
 
     // Grant read access to secrets
