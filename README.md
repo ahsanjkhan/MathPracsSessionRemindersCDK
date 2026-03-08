@@ -19,58 +19,27 @@ AWS Lambda, AWS DynamoDB, AWS EventBridge Scheduler, AWS SecretsManager, Twilio 
 
 ### How To Deploy
 
-### Prerequisites
+Raising a Pull Request for commits on a feature branch, getting it approved, and squashing and merging into `main` on either this repo or [MathPracsSessionRemindersLambda](https://github.com/ahsanjkhan/MathPracsSessionRemindersLambda) automatically triggers the CodePipeline, which runs deploys the changes.
 
-1. **Have the MathPracsSessionRemindersLambda repository also setup in your project in addition to this repository**
-2. **Install Node.js** (version 18 or later)
-3. **Install AWS CLI** and configure with your credentials
-4. **Install Finch** (Docker alternative for CDK Python bundling)
-5. **Deploy MathPracsPaymentRemindersCDK and MathPracs-TutoringManagement-CDK stacks first** (this stack imports resources from them)
 
-### Install Node.js
-```bash
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+#### First-Time Setup
 
-source ~/.bashrc
-
-nvm install 20
-nvm use 20
-nvm alias default 20
-```
-
-#### Setup Finch
-
-**macOS (using Homebrew):**
-```bash
-brew install finch
-finch vm init
-finch vm start
-```
-
-**Other platforms:** Follow instructions at https://github.com/runfinch/finch
-
-#### Deploy the Stack
-
-0. **Set Node JS Version:**
-   ```bash
-   node --version # should show 20.x
-   nvm use 20 # switch to 20 if it does not
-   node --version # verify that it shows 20.x now
-   ```
-
-1. **Install dependencies:**
+1. **Install Node.js** (version 20), **AWS CLI**, and **Finch** (`brew install finch && finch vm init && finch vm start`)
+2. **Bootstrap CDK:** `npx cdk bootstrap`
+3. **Deploy the pipeline stack:**
    ```bash
    npm install
+   CDK_DOCKER=finch npx cdk deploy MathPracsSessionRemindersPipelineStack
    ```
 
-2. **Bootstrap CDK (first time only):**
-   ```bash
-   npx cdk bootstrap
-   ```
+After this, all future changes are deployed automatically via the pipeline.
 
-3. **Deploy with Finch:**
+#### Manual Deployments (Avoid if possible)
+1. Make changes on feature branch.
+2. Commit those changes and raise Pull Request as usual.
+3. Deploy the changes directly:
    ```bash
-   CDK_DOCKER=finch npx cdk deploy
+   CDK_DOCKER=finch npx cdk deploy MathPracsSessionRemindersStack
    ```
 
 #### Useful Commands
@@ -78,7 +47,7 @@ finch vm start
 - `CDK_DOCKER=finch npx cdk diff` - Compare deployed stack with current state
 - `CDK_DOCKER=finch npx cdk synth` - Emit the synthesized CloudFormation template
 - `CDK_DOCKER=finch npx cdk deploy` - Deploy with Finch Docker support
-- `CDK_DOCKER=finch npx cdk destroy` - Destroy the stack
+- `CDK_DOCKER=finch npx cdk destroy` - Destroy the stack # DANGEROUS!!
 - `finch vm status` - See Finch VM Status
 - `finch vm stop` - Stop Finch VM
 
