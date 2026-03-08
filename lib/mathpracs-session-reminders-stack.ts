@@ -27,7 +27,9 @@ import {
   CFN_OUTPUT_SESSION_REMINDERS_TABLE_ID,
   CFN_OUTPUT_SESSION_REMINDERS_TABLE_DESCRIPTION,
   CFN_OUTPUT_SESSION_REMINDERS_LAMBDA_ID,
-  CFN_OUTPUT_SESSION_REMINDERS_LAMBDA_DESCRIPTION, SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_STUDENTS_METADATA_TABLE_NAME
+  CFN_OUTPUT_SESSION_REMINDERS_LAMBDA_DESCRIPTION, SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_STUDENTS_METADATA_TABLE_NAME,
+  SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_TUTORS_TABLE_NAME,
+  SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_TUTORS_METADATA_TABLE_NAME
 } from "../config/constants";
 
 export class MathPracsSessionRemindersStack extends cdk.Stack {
@@ -44,10 +46,18 @@ export class MathPracsSessionRemindersStack extends cdk.Stack {
 
     // Import resources from other stacks
     const sessionsTableArn = cdk.Fn.importValue('MathPracs-SessionsTable-Arn');
-    const studentsTableArn = cdk.Fn.importValue('MathPracs-StudentsTable-Arn');
     const studentsV2TableArn = cdk.Fn.importValue('MathPracs-StudentsV2Table-Arn');
     const studentsMetadataV2TableArn = cdk.Fn.importValue('MathPracs-StudentsMetadataV2Table-Arn');
+    const importedTutorsV2TableArn = cdk.Fn.importValue('MathPracs-TutorsV2Table-Arn');
+    const importedTutorsMetadataV2TableArn = cdk.Fn.importValue('MathPracs-TutorsMetadataV2Table-Arn');
     const apiSecretsArn = cdk.Fn.importValue('MathPracs-ApiSecrets-Arn');
+
+    // Lookup tables and extract their names
+    const importedSessionsTableName = dynamodb.Table.fromTableArn(this, 'SessionsTableName', sessionsTableArn).tableName;
+    const importedStudentsV2TableName = dynamodb.Table.fromTableArn(this, 'StudentsV2TableName', studentsV2TableArn).tableName;
+    const importedStudentsMetadataV2TableName = dynamodb.Table.fromTableArn(this, 'StudentsMetadataV2TableName', studentsMetadataV2TableArn).tableName;
+    const importedTutorsV2TableName = dynamodb.Table.fromTableArn(this, 'TutorsV2TableName', importedTutorsV2TableArn).tableName;
+    const importedTutorsMetadataV2TableName = dynamodb.Table.fromTableArn(this, 'TutorsMetadataV2TableName', importedTutorsMetadataV2TableArn).tableName;
 
     // Session Reminders Lambda
     const sessionRemindersLambda = new python.PythonFunction(this, SESSION_REMINDERS_LAMBDA_ID, {
@@ -61,9 +71,11 @@ export class MathPracsSessionRemindersStack extends cdk.Stack {
     });
 
     sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_SESSION_REMINDERS_TABLE_NAME, sessionRemindersTable.tableName);
-    sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_SESSIONS_TABLE_NAME, 'Sessions');
-    sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_STUDENTS_TABLE_NAME, 'StudentsV2');
-    sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_STUDENTS_METADATA_TABLE_NAME, 'StudentsMetadataV2');
+    sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_SESSIONS_TABLE_NAME, importedSessionsTableName);
+    sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_STUDENTS_TABLE_NAME, importedStudentsV2TableName);
+    sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_STUDENTS_METADATA_TABLE_NAME, importedStudentsMetadataV2TableName);
+    sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_TUTORS_TABLE_NAME, importedTutorsV2TableName);
+    sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_TUTORS_METADATA_TABLE_NAME, importedTutorsMetadataV2TableName);
     sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_API_SECRETS_ARN, apiSecretsArn);
 
     // Grant Lambda permissions
@@ -72,7 +84,13 @@ export class MathPracsSessionRemindersStack extends cdk.Stack {
     // Grant read access to imported tables
     sessionRemindersLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: ['dynamodb:Scan', 'dynamodb:GetItem', 'dynamodb:Query'],
-      resources: [sessionsTableArn, studentsV2TableArn, studentsMetadataV2TableArn]
+      resources: [
+          sessionsTableArn,
+          studentsV2TableArn,
+          studentsMetadataV2TableArn,
+          importedTutorsV2TableArn,
+          importedTutorsMetadataV2TableArn
+      ]
     }));
 
     // Grant read access to secrets
