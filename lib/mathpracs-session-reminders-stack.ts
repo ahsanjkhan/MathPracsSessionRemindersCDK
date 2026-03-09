@@ -29,7 +29,8 @@ import {
   CFN_OUTPUT_SESSION_REMINDERS_LAMBDA_ID,
   CFN_OUTPUT_SESSION_REMINDERS_LAMBDA_DESCRIPTION, SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_STUDENTS_METADATA_TABLE_NAME,
   SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_TUTORS_TABLE_NAME,
-  SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_TUTORS_METADATA_TABLE_NAME
+  SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_TUTORS_METADATA_TABLE_NAME,
+  SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_DISCORD_SECRETS_ARN
 } from "../config/constants";
 
 export class MathPracsSessionRemindersStack extends cdk.Stack {
@@ -50,6 +51,7 @@ export class MathPracsSessionRemindersStack extends cdk.Stack {
     const studentsMetadataV2TableArn = cdk.Fn.importValue('MathPracs-StudentsMetadataV2Table-Arn');
     const importedTutorsV2TableArn = cdk.Fn.importValue('MathPracs-TutorsV2Table-Arn');
     const importedTutorsMetadataV2TableArn = cdk.Fn.importValue('MathPracs-TutorsMetadataV2Table-Arn');
+    const importedDiscordApiSecretsArn = cdk.Fn.importValue('MathPracs-DiscordCredentials-Arn');
     const apiSecretsArn = cdk.Fn.importValue('MathPracs-ApiSecrets-Arn');
 
     // Lookup tables and extract their names
@@ -76,6 +78,7 @@ export class MathPracsSessionRemindersStack extends cdk.Stack {
     sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_STUDENTS_METADATA_TABLE_NAME, importedStudentsMetadataV2TableName);
     sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_TUTORS_TABLE_NAME, importedTutorsV2TableName);
     sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_TUTORS_METADATA_TABLE_NAME, importedTutorsMetadataV2TableName);
+    sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_DISCORD_SECRETS_ARN, importedDiscordApiSecretsArn)
     sessionRemindersLambda.addEnvironment(SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_API_SECRETS_ARN, apiSecretsArn);
 
     // Grant Lambda permissions
@@ -96,7 +99,10 @@ export class MathPracsSessionRemindersStack extends cdk.Stack {
     // Grant read access to secrets
     sessionRemindersLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: ['secretsmanager:GetSecretValue'],
-      resources: [apiSecretsArn]
+      resources: [
+          importedDiscordApiSecretsArn,
+          apiSecretsArn
+      ]
     }));
 
     // EventBridge Rule - every 3 minutes
