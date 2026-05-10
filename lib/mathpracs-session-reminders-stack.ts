@@ -6,6 +6,7 @@ import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as cloudwatch_actions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import { Construct } from 'constructs';
@@ -175,7 +176,14 @@ export class MathPracsSessionRemindersStack extends cdk.Stack {
       resources: [importedDiscordApiSecretsArn]
     }));
 
-    alarmTopic.addSubscription(new sns_subscriptions.LambdaSubscription(alarmNotifierLambda));
+    const alarmNotifierDlq = new sqs.Queue(this, 'AlarmNotifierDLQ', {
+      queueName: 'mathpracs-session-reminders-alarm-notifier-dlq',
+      retentionPeriod: cdk.Duration.days(14),
+    });
+
+    alarmTopic.addSubscription(new sns_subscriptions.LambdaSubscription(alarmNotifierLambda, {
+      deadLetterQueue: alarmNotifierDlq,
+    }));
 
     // CloudWatch Alarms
     const studentInfoDdbAlarm = new cloudwatch.Alarm(this, ALARM_STUDENT_INFO_DDB_ID, {
