@@ -4,6 +4,10 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as sns from 'aws-cdk-lib/aws-sns';
+import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as cloudwatch_actions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import { Construct } from 'constructs';
 import {
   SESSION_REMINDERS_TABLE_NAME,
@@ -27,10 +31,35 @@ import {
   CFN_OUTPUT_SESSION_REMINDERS_TABLE_ID,
   CFN_OUTPUT_SESSION_REMINDERS_TABLE_DESCRIPTION,
   CFN_OUTPUT_SESSION_REMINDERS_LAMBDA_ID,
-  CFN_OUTPUT_SESSION_REMINDERS_LAMBDA_DESCRIPTION, SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_STUDENTS_METADATA_TABLE_NAME,
+  CFN_OUTPUT_SESSION_REMINDERS_LAMBDA_DESCRIPTION,
+  SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_STUDENTS_METADATA_TABLE_NAME,
   SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_TUTORS_TABLE_NAME,
   SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_TUTORS_METADATA_TABLE_NAME,
-  SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_DISCORD_SECRETS_ARN
+  SESSION_REMINDERS_LAMBDA_ENV_VAR_KEY_DISCORD_SECRETS_ARN,
+  ALARM_NOTIFIER_LAMBDA_NAME,
+  ALARM_NOTIFIER_LAMBDA_ID,
+  ALARM_NOTIFIER_LAMBDA_RUNTIME,
+  ALARM_NOTIFIER_LAMBDA_ENTRY,
+  ALARM_NOTIFIER_LAMBDA_INDEX,
+  ALARM_NOTIFIER_LAMBDA_HANDLER,
+  ALARM_NOTIFIER_LAMBDA_TIMEOUT,
+  ALARM_NOTIFIER_LAMBDA_MEMORY_SIZE,
+  ALARM_NOTIFIER_LAMBDA_ENV_VAR_KEY_DISCORD_SECRETS_ARN,
+  ALARM_SNS_TOPIC_NAME,
+  ALARM_SNS_TOPIC_ID,
+  METRICS_NAMESPACE,
+  ALARM_STUDENT_INFO_DDB_ID,
+  ALARM_STUDENT_INFO_DDB_NAME,
+  ALARM_STUDENT_INFO_DDB_DESCRIPTION,
+  ALARM_TUTOR_INFO_DDB_ID,
+  ALARM_TUTOR_INFO_DDB_NAME,
+  ALARM_TUTOR_INFO_DDB_DESCRIPTION,
+  ALARM_API_FAILURE_ID,
+  ALARM_API_FAILURE_NAME,
+  ALARM_API_FAILURE_DESCRIPTION,
+  ALARM_UNKNOWN_FAILURES_ID,
+  ALARM_UNKNOWN_FAILURES_NAME,
+  ALARM_UNKNOWN_FAILURES_DESCRIPTION,
 } from "../config/constants";
 
 export class MathPracsSessionRemindersStack extends cdk.Stack {
@@ -113,6 +142,105 @@ export class MathPracsSessionRemindersStack extends cdk.Stack {
     });
 
     sessionRemindersScheduleRule.addTarget(new targets.LambdaFunction(sessionRemindersLambda));
+
+    // Grant CloudWatch PutMetricData to session reminders Lambda
+    sessionRemindersLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cloudwatch:PutMetricData'],
+      resources: ['*'],
+      conditions: {
+        StringEquals: { 'cloudwatch:namespace': METRICS_NAMESPACE }
+      }
+    }));
+
+    // SNS Topic for alarms
+    const alarmTopic = new sns.Topic(this, ALARM_SNS_TOPIC_ID, {
+      topicName: ALARM_SNS_TOPIC_NAME,
+    });
+
+    // Alarm Notifier Lambda
+    const alarmNotifierLambda = new python.PythonFunction(this, ALARM_NOTIFIER_LAMBDA_ID, {
+      functionName: ALARM_NOTIFIER_LAMBDA_NAME,
+      runtime: ALARM_NOTIFIER_LAMBDA_RUNTIME,
+      entry: ALARM_NOTIFIER_LAMBDA_ENTRY,
+      index: ALARM_NOTIFIER_LAMBDA_INDEX,
+      handler: ALARM_NOTIFIER_LAMBDA_HANDLER,
+      timeout: ALARM_NOTIFIER_LAMBDA_TIMEOUT,
+      memorySize: ALARM_NOTIFIER_LAMBDA_MEMORY_SIZE,
+    });
+
+    alarmNotifierLambda.addEnvironment(ALARM_NOTIFIER_LAMBDA_ENV_VAR_KEY_DISCORD_SECRETS_ARN, importedDiscordApiSecretsArn);
+
+    alarmNotifierLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['secretsmanager:GetSecretValue'],
+      resources: [importedDiscordApiSecretsArn]
+    }));
+
+    alarmTopic.addSubscription(new sns_subscriptions.LambdaSubscription(alarmNotifierLambda));
+
+    // CloudWatch Alarms
+    const studentInfoDdbAlarm = new cloudwatch.Alarm(this, ALARM_STUDENT_INFO_DDB_ID, {
+      alarmName: ALARM_STUDENT_INFO_DDB_NAME,
+      alarmDescription: ALARM_STUDENT_INFO_DDB_DESCRIPTION,
+      metric: new cloudwatch.Metric({
+        namespace: METRICS_NAMESPACE,
+        metricName: 'StudentInfoDDB',
+        statistic: 'Sum',
+        period: cdk.Duration.minutes(1),
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    studentInfoDdbAlarm.addAlarmAction(new cloudwatch_actions.SnsAction(alarmTopic));
+
+    const tutorInfoDdbAlarm = new cloudwatch.Alarm(this, ALARM_TUTOR_INFO_DDB_ID, {
+      alarmName: ALARM_TUTOR_INFO_DDB_NAME,
+      alarmDescription: ALARM_TUTOR_INFO_DDB_DESCRIPTION,
+      metric: new cloudwatch.Metric({
+        namespace: METRICS_NAMESPACE,
+        metricName: 'TutorInfoDDB',
+        statistic: 'Sum',
+        period: cdk.Duration.minutes(1),
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    tutorInfoDdbAlarm.addAlarmAction(new cloudwatch_actions.SnsAction(alarmTopic));
+
+    const apiFailureAlarm = new cloudwatch.Alarm(this, ALARM_API_FAILURE_ID, {
+      alarmName: ALARM_API_FAILURE_NAME,
+      alarmDescription: ALARM_API_FAILURE_DESCRIPTION,
+      metric: new cloudwatch.Metric({
+        namespace: METRICS_NAMESPACE,
+        metricName: 'APIFailure',
+        statistic: 'Sum',
+        period: cdk.Duration.minutes(1),
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    apiFailureAlarm.addAlarmAction(new cloudwatch_actions.SnsAction(alarmTopic));
+
+    const unknownFailuresAlarm = new cloudwatch.Alarm(this, ALARM_UNKNOWN_FAILURES_ID, {
+      alarmName: ALARM_UNKNOWN_FAILURES_NAME,
+      alarmDescription: ALARM_UNKNOWN_FAILURES_DESCRIPTION,
+      metric: new cloudwatch.Metric({
+        namespace: METRICS_NAMESPACE,
+        metricName: 'UnknownFailures',
+        statistic: 'Sum',
+        period: cdk.Duration.minutes(1),
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    unknownFailuresAlarm.addAlarmAction(new cloudwatch_actions.SnsAction(alarmTopic));
 
     // Outputs
     new cdk.CfnOutput(this, CFN_OUTPUT_SESSION_REMINDERS_TABLE_ID, {
