@@ -185,70 +185,57 @@ export class MathPracsSessionRemindersStack extends cdk.Stack {
       deadLetterQueue: alarmNotifierDlq,
     }));
 
-    // CloudWatch Alarms
-    const studentInfoDdbAlarm = new cloudwatch.Alarm(this, ALARM_STUDENT_INFO_DDB_ID, {
-      alarmName: ALARM_STUDENT_INFO_DDB_NAME,
-      alarmDescription: ALARM_STUDENT_INFO_DDB_DESCRIPTION,
-      metric: new cloudwatch.Metric({
-        namespace: METRICS_NAMESPACE,
-        metricName: 'StudentInfoDDB',
-        statistic: 'Sum',
-        period: cdk.Duration.minutes(1),
-      }),
-      threshold: 1,
-      evaluationPeriods: 1,
-      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
-    });
-    studentInfoDdbAlarm.addAlarmAction(new cloudwatch_actions.SnsAction(alarmTopic));
+    // CloudWatch Alarms — per-dimension child alarms (no actions)
+    const childAlarmConfig: { metricName: string; reasons: string[]; namePrefix: string }[] = [
+      { metricName: 'StudentInfoDDB', reasons: ['StudentNotFound', 'MetadataNotFound', 'FetchException', 'UnknownTimezone', 'NoPhoneNumbers'], namePrefix: 'student-info-ddb' },
+      { metricName: 'TutorInfoDDB', reasons: ['TutorNotFound', 'MetadataNotFound', 'FetchException', 'UnknownTutorName', 'UnknownTimezone', 'NoDiscordChannel'], namePrefix: 'tutor-info-ddb' },
+      { metricName: 'APIFailure', reasons: ['TwilioPermanent', 'TwilioTransient', 'TwilioGeneric', 'DiscordSendFailed'], namePrefix: 'api-failure' },
+      { metricName: 'UnknownFailures', reasons: ['UnhandledException'], namePrefix: 'unknown-failures' },
+    ];
 
-    const tutorInfoDdbAlarm = new cloudwatch.Alarm(this, ALARM_TUTOR_INFO_DDB_ID, {
-      alarmName: ALARM_TUTOR_INFO_DDB_NAME,
-      alarmDescription: ALARM_TUTOR_INFO_DDB_DESCRIPTION,
-      metric: new cloudwatch.Metric({
-        namespace: METRICS_NAMESPACE,
-        metricName: 'TutorInfoDDB',
-        statistic: 'Sum',
-        period: cdk.Duration.minutes(1),
-      }),
-      threshold: 1,
-      evaluationPeriods: 1,
-      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
-    });
-    tutorInfoDdbAlarm.addAlarmAction(new cloudwatch_actions.SnsAction(alarmTopic));
+    const childAlarmsByCategory: Record<string, cloudwatch.Alarm[]> = {};
 
-    const apiFailureAlarm = new cloudwatch.Alarm(this, ALARM_API_FAILURE_ID, {
-      alarmName: ALARM_API_FAILURE_NAME,
-      alarmDescription: ALARM_API_FAILURE_DESCRIPTION,
-      metric: new cloudwatch.Metric({
-        namespace: METRICS_NAMESPACE,
-        metricName: 'APIFailure',
-        statistic: 'Sum',
-        period: cdk.Duration.minutes(1),
-      }),
-      threshold: 1,
-      evaluationPeriods: 1,
-      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
-    });
-    apiFailureAlarm.addAlarmAction(new cloudwatch_actions.SnsAction(alarmTopic));
+    for (const config of childAlarmConfig) {
+      childAlarmsByCategory[config.metricName] = [];
+      for (const reason of config.reasons) {
+        const alarm = new cloudwatch.Alarm(this, `${config.metricName}-${reason}-Alarm`, {
+          alarmName: `mathpracs-session-reminders-${config.namePrefix}-${reason}`,
+          alarmDescription: `Session Reminders: ${config.metricName} - ${reason}`,
+          metric: new cloudwatch.Metric({
+            namespace: METRICS_NAMESPACE,
+            metricName: config.metricName,
+            dimensionsMap: { Reason: reason },
+            statistic: 'Sum',
+            period: cdk.Duration.minutes(1),
+          }),
+          threshold: 1,
+          evaluationPeriods: 1,
+          comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+          treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+        });
+        childAlarmsByCategory[config.metricName].push(alarm);
+      }
+    }
 
-    const unknownFailuresAlarm = new cloudwatch.Alarm(this, ALARM_UNKNOWN_FAILURES_ID, {
-      alarmName: ALARM_UNKNOWN_FAILURES_NAME,
-      alarmDescription: ALARM_UNKNOWN_FAILURES_DESCRIPTION,
-      metric: new cloudwatch.Metric({
-        namespace: METRICS_NAMESPACE,
-        metricName: 'UnknownFailures',
-        statistic: 'Sum',
-        period: cdk.Duration.minutes(1),
-      }),
-      threshold: 1,
-      evaluationPeriods: 1,
-      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
-    });
-    unknownFailuresAlarm.addAlarmAction(new cloudwatch_actions.SnsAction(alarmTopic));
+    // Composite parent alarms (with SNS action)
+    const compositeAlarmConfigs = [
+      { id: ALARM_STUDENT_INFO_DDB_ID, name: ALARM_STUDENT_INFO_DDB_NAME, description: ALARM_STUDENT_INFO_DDB_DESCRIPTION, metricName: 'StudentInfoDDB' },
+      { id: ALARM_TUTOR_INFO_DDB_ID, name: ALARM_TUTOR_INFO_DDB_NAME, description: ALARM_TUTOR_INFO_DDB_DESCRIPTION, metricName: 'TutorInfoDDB' },
+      { id: ALARM_API_FAILURE_ID, name: ALARM_API_FAILURE_NAME, description: ALARM_API_FAILURE_DESCRIPTION, metricName: 'APIFailure' },
+      { id: ALARM_UNKNOWN_FAILURES_ID, name: ALARM_UNKNOWN_FAILURES_NAME, description: ALARM_UNKNOWN_FAILURES_DESCRIPTION, metricName: 'UnknownFailures' },
+    ];
+
+    for (const config of compositeAlarmConfigs) {
+      const children = childAlarmsByCategory[config.metricName];
+      const alarmRule = cloudwatch.AlarmRule.anyOf(...children);
+
+      const compositeAlarm = new cloudwatch.CompositeAlarm(this, config.id, {
+        compositeAlarmName: config.name,
+        alarmDescription: config.description,
+        alarmRule,
+      });
+      compositeAlarm.addAlarmAction(new cloudwatch_actions.SnsAction(alarmTopic));
+    }
 
     // Outputs
     new cdk.CfnOutput(this, CFN_OUTPUT_SESSION_REMINDERS_TABLE_ID, {
