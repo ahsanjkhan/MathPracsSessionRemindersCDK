@@ -50,18 +50,18 @@ export const ALARM_SNS_TOPIC_ID = 'SessionRemindersAlarmTopic';
 // CloudWatch Alarms
 export const METRICS_NAMESPACE = 'MathPracs/SessionReminders';
 
-export const ALARM_STUDENT_INFO_DDB_ID = 'StudentInfoDDBAlarm';
-export const ALARM_STUDENT_INFO_DDB_NAME = 'mathpracs-session-reminders-student-info-ddb';
+export const ALARM_STUDENT_INFO_DDB_ID = 'StudentInfoDDBCompositeAlarm';
+export const ALARM_STUDENT_INFO_DDB_NAME = 'mathpracs-session-reminders-student-info-ddb-composite';
 export const ALARM_STUDENT_INFO_DDB_DESCRIPTION = 'Session Reminders: student data lookup failure';
 
-export const ALARM_TUTOR_INFO_DDB_ID = 'TutorInfoDDBAlarm';
-export const ALARM_TUTOR_INFO_DDB_NAME = 'mathpracs-session-reminders-tutor-info-ddb';
+export const ALARM_TUTOR_INFO_DDB_ID = 'TutorInfoDDBCompositeAlarm';
+export const ALARM_TUTOR_INFO_DDB_NAME = 'mathpracs-session-reminders-tutor-info-ddb-composite';
 export const ALARM_TUTOR_INFO_DDB_DESCRIPTION = 'Session Reminders: tutor data lookup failure';
 
-export const ALARM_API_FAILURE_ID = 'APIFailureAlarm';
-export const ALARM_API_FAILURE_NAME = 'mathpracs-session-reminders-api-failure';
+export const ALARM_API_FAILURE_ID = 'APIFailureCompositeAlarm';
+export const ALARM_API_FAILURE_NAME = 'mathpracs-session-reminders-api-failure-composite';
 export const ALARM_API_FAILURE_DESCRIPTION = 'Session Reminders: external API call failure';
 
-export const ALARM_UNKNOWN_FAILURES_ID = 'UnknownFailuresAlarm';
-export const ALARM_UNKNOWN_FAILURES_NAME = 'mathpracs-session-reminders-unknown-failures';
+export const ALARM_UNKNOWN_FAILURES_ID = 'UnknownFailuresCompositeAlarm';
+export const ALARM_UNKNOWN_FAILURES_NAME = 'mathpracs-session-reminders-unknown-failures-composite';
 export const ALARM_UNKNOWN_FAILURES_DESCRIPTION = 'Session Reminders: unhandled exception in Lambda';
